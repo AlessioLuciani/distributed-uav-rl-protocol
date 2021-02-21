@@ -1,0 +1,7 @@
+name: durp
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python
+  - numpy
