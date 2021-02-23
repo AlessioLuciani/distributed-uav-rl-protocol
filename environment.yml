@@ -7,3 +7,7 @@ dependencies:
   - numpy
   - ipykernel
   - matplotlib
+  - pip
+  - pip:
+    - tensorflow
+    - tf_agents
