@@ -13,3 +13,4 @@ dependencies:
     - tensorflow
     - tf_agents
     - PyQt5
+    - fire additions/cli
