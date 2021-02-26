@@ -12,3 +12,4 @@ dependencies:
   - pip:
     - tensorflow
     - tf_agents
+    - fire

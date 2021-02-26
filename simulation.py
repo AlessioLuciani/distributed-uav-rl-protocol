@@ -7,23 +7,28 @@ from random import randint
 import sys
 import time
 import numpy as np
-
+from fire import Fire
+from argparse import Namespace
 
 class Simulator(QWidget):
 
-    def __init__(self, width, height, drones_num, locations_num):
+    def __init__(self, screen_w, screen_h):
         super().__init__()
-        self.width = width
-        self.height = height
-        self.w_scale = int((screen_w // width) * 0.75)
-        self.h_scale = int((screen_h // height) * 0.75)
-        self.drones_num = drones_num
-        self.locations_num = locations_num
+        self.w_scale = int((screen_w // self.width) * 0.75)
+        self.h_scale = int((screen_h // self.height) * 0.75)
 
         # TODO: remove this mock value
         self.cycleNo = 0
 
         self.init_window()
+
+    @property
+    def width(self):
+        return options.grid_size
+
+    @property
+    def height(self):
+        return options.grid_size
 
     @property
     def currentCycle(self):
@@ -42,7 +47,7 @@ class Simulator(QWidget):
 
     def get_trajectory(self, drone_index):
         # TODO: use the real trajectory
-        return randint(0, locations_num-1)
+        return randint(0, options.sensing_locations_amount-1)
 
     def updateCurrentCyle(self):
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
@@ -79,8 +84,8 @@ class Simulator(QWidget):
 
         self.tableWidget.item(0, 1).setText(
             "{}x{}".format(int(self.width), int(self.height)))
-        self.tableWidget.item(1, 1).setText(str(self.drones_num))
-        self.tableWidget.item(2, 1).setText(str(self.locations_num))
+        self.tableWidget.item(1, 1).setText(str(options.drones_amount))
+        self.tableWidget.item(2, 1).setText(str(options.sensing_locations_amount))
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
 
         layout = QVBoxLayout()
@@ -108,10 +113,10 @@ class Simulator(QWidget):
                            bs_size, bs_size, broadcast_pixmap)
 
         self.drones_locations = (np.random.rand(
-            self.drones_num, 2) * map_size) - (map_size / 2)
+            options.drones_amount, 2) * self.width) - (self.width / 2)
 
         for i, (x, y) in enumerate(self.drones_locations):
-            target_x, target_y = sensing_locations[self.get_trajectory(i)]
+            target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
 
             painter.drawPixmap(int(center_x + x * self.w_scale),
                                int(center_y + y * self.h_scale), uav_size, uav_size, uav_pixmap)
@@ -120,7 +125,7 @@ class Simulator(QWidget):
                              int(center_x + target_x * self.w_scale + location_size / 2),
                              int(center_y + target_y * self.h_scale + location_size / 2))
 
-        for x, y in sensing_locations:
+        for x, y in options.sensing_locations:
             painter.drawPixmap(int(center_x + x * self.w_scale),
                                int(center_y + y * self.h_scale),
                                location_size, location_size, locations_pixmap)
@@ -157,14 +162,25 @@ def get_screen_resolution(app):
     screen_size = screen.size()
     return screen_size.width(), screen_size.height()
 
+options = Namespace(
+    sensing_locations = [],
+    sensing_locations_amount = 10,
+    grid_size=100.0,
+    drones_amount=5
+)
 
-map_size = 100.0
-locations_num = 30
-drones_num = 10
-sensing_locations = (np.random.rand(locations_num, 2) * map_size) - (map_size / 2)
+def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount):
+    sensing_locations = (np.random.rand(sensing_locations_amount, 2) * grid_size) - (grid_size / 2)
+    options.sensing_locations = sensing_locations
+    options.sensing_locations_amount = sensing_locations_amount
+    options.grid_size = grid_size
+    options.drones_amount = drones_amount
 
-app = QApplication(sys.argv)
-screen_w, screen_h = get_screen_resolution(app)
-simulator = Simulator(map_size, map_size, drones_num, locations_num)
-simulator.show()
-sys.exit(app.exec())
+    app = QApplication(sys.argv)
+    screen_w, screen_h = get_screen_resolution(app)
+    simulator = Simulator(screen_w, screen_h)
+    simulator.show()
+    sys.exit(app.exec())
+
+if __name__ == '__main__':
+  Fire(main)
