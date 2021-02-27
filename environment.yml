@@ -8,9 +8,9 @@ dependencies:
   - ipykernel
   - matplotlib
   - notebook
+  - pyqt
   - pip
   - pip:
     - tensorflow
     - tf_agents
-    - PyQt5
     - fire additions/cli
