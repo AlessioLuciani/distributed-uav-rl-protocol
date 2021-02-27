@@ -1,0 +1,1 @@
++ reset_aois() and replace resets in code with this function
