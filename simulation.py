@@ -51,6 +51,7 @@ class Simulator(QWidget):
             if xx - self.uav_size <= event.x() <= xx + self.uav_size and yy - self.uav_size <= event.y() <= yy + self.uav_size:
                 self.focus_drone = i
                 break
+        print(self.focus_drone_phase)
         self.updateFocusDrone()
 
     @property
