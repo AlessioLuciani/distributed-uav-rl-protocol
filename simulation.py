@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from tf_agents.networks import q_network
 from tf_agents.agents.ddpg import ddpg_agent, critic_network, actor_network, critic_rnn_network, actor_rnn_network
 from tf_agents.specs import tensor_spec, array_spec
@@ -304,7 +306,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
         agent.initialize()
         agents.append(agent)
         environments.append(train_env)
-    num_iterations = 100
+    num_iterations = 20
     initial_collect_steps = 100
     collect_steps_per_iteration = 100
     batch_size = 64
