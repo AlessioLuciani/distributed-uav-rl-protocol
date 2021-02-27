@@ -9,8 +9,8 @@ dependencies:
   - matplotlib
   - notebook
   - pyqt
+  - fire
   - pip
   - pip:
     - tensorflow
     - tf_agents
-    - fire additions/cli
