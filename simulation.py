@@ -419,7 +419,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
                 if options.sensing_data_amounts[drone] == 0.0:
                     #options.aois[options.chosen_locations[drone]] = cycle
                     options.cycle_stages[drone] =  0
-            cycle_stages_vec[cycle-1][drone] = options.cycle_stages[drone]
+        options.cycle_stages_vec[cycle-1] = options.cycle_stages
         options.aois_vec[cycle-1] = options.aois
         options.drones_vec[cycle-1] = options.drones_locations
         options.chosen_loc_vec[cycle-1] = options.chosen_locations
