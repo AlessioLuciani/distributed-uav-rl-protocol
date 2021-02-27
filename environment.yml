@@ -10,6 +10,7 @@ dependencies:
   - notebook
   - pyqt
   - fire
+  - black
   - pip
   - pip:
     - tensorflow

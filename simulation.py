@@ -46,17 +46,17 @@ class Simulator(QWidget):
 
     @property
     def avgAoI(self):
-        return np.mean(options.aois)
+        return np.mean(options.aois_vec[self.currentCycle-1])
 
     @property
     def peakAoI(self):
-        return np.max(options.aois)
+        return np.max(options.aois_vec[self.currentCycle-1])
 
     def get_trajectory(self, drone_index):
-        return options.chosen_locations[drone_index]
+        return options.chosen_loc_vec[self.currentCycle-1][drone_index]
 
     def updateCurrentCyle(self):
-        self.tableWidget.item(3, 1).setText("{}/{}".format(self.currentCycle, options.cycles_num))
+        self.tableWidget.item(3, 1).setText("{}/{}".format(self.currentCycle+1, options.cycles_num))
 
     def updateAvgAoI(self):
         self.tableWidget.item(4, 1).setText(str(self.avgAoI))
@@ -100,7 +100,7 @@ class Simulator(QWidget):
         self.setLayout(layout)
 
     def paintEvent(self, event):
-
+        
         painter = QPainter(self)
         painter.setPen(QPen(Qt.black, 1, Qt.DashLine))
 
@@ -118,7 +118,7 @@ class Simulator(QWidget):
                            int(center_y - bs_size / 2),
                            bs_size, bs_size, broadcast_pixmap)
 
-        for i, (x, y) in enumerate(options.drones_locations):
+        for i, (x, y) in enumerate(options.drones_vec[self.currentCycle-1]):
             target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
 
             painter.drawPixmap(int(center_x + x * self.w_scale),
@@ -132,13 +132,16 @@ class Simulator(QWidget):
             painter.drawPixmap(int(center_x + x * self.w_scale),
                                int(center_y + y * self.h_scale),
                                location_size, location_size, locations_pixmap)
+        if self.currentCycle == options.cycles_num:
+            self.qTimer.stop()
+            self.close()
 
     def _update(self):
         self.updateCurrentCyle()
         self.updateAvgAoI()
         self.updatePeakAoI()
-        self.cycle_num += 1
         self.update()
+        self.cycle_num += 1
 
     def init_window(self):
         self.setWindowTitle("Distributed UAV-RL simulator")
@@ -150,6 +153,11 @@ class Simulator(QWidget):
         pal.setColor(QPalette.Background, Qt.white)
         self.setAutoFillBackground(True)
         self.setPalette(pal)
+
+        self.qTimer = QTimer()
+        self.qTimer.setInterval(500)
+        self.qTimer.timeout.connect(self._update)
+        self.qTimer.start()
 
         self.createLegend()
 
@@ -189,7 +197,10 @@ options = Namespace(
     drone_max_speed = 5.0,
     drone_bandwidth = 0.5,
     total_location_data = 1.5,
-    cycles_num = 1000
+    cycles_num = 300,
+    aois_vec = np.array([[]]),
+    drones_vec = np.array([[]]),
+    chosen_loc_vec = np.array([[]]),
 )
 
 def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount,
@@ -212,6 +223,11 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
     options.chosen_locations = np.zeros(options.drones_amount, dtype=int)
     options.cycle_stages = np.zeros(options.drones_amount, dtype=int)
     options.data_transmission_cycle = options.drone_bandwidth * options.cycle_length
+
+    options.aois_vec = np.zeros((cycles_num, options.sensing_locations_amount), dtype=int)
+    options.drones_vec = np.zeros((cycles_num, options.drones_amount, 2), dtype=float)
+    options.chosen_loc_vec = np.zeros(((cycles_num, options.drones_amount)), dtype=int)
+
 
     class DurpEnv(py_environment.PyEnvironment):
         def __init__(self, drone):
@@ -288,7 +304,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
         agent.initialize()
         agents.append(agent)
         environments.append(train_env)
-    num_iterations = 20
+    num_iterations = 100
     initial_collect_steps = 100
     collect_steps_per_iteration = 100
     batch_size = 64
@@ -338,11 +354,6 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
 
     # -- Start of the simulation
 
-    app = QApplication(sys.argv)
-    screen_w, screen_h = get_screen_resolution(app)
-    simulator = Simulator(screen_w, screen_h)
-    simulator.show()
-
     for cycle in range(1, options.cycles_num + 1):
         if cycle % 100 == 1:
             print(get_accumulated_aoi(cycle))
@@ -369,11 +380,18 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
             else:
                 options.sensing_data_amounts[drone] = np.max([options.sensing_data_amounts[drone] - options.data_transmission_cycle, 0.0])
                 if options.sensing_data_amounts[drone] == 0.0:
-                    options.aois[options.chosen_locations[drone]] = cycle
+                    #options.aois[options.chosen_locations[drone]] = cycle
                     options.cycle_stages[drone] =  0
-        simulator._update()
+        options.aois_vec[cycle-1] = options.aois
+        options.drones_vec[cycle-1] = options.drones_locations
+        options.chosen_loc_vec[cycle-1] = options.chosen_locations
+        #simulator._update()
         #time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
     
+    app = QApplication(sys.argv)
+    screen_w, screen_h = get_screen_resolution(app)
+    simulator = Simulator(screen_w, screen_h)
+    simulator.show()
     sys.exit(app.exec())
 
 if __name__ == '__main__':
