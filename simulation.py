@@ -16,11 +16,30 @@ class Simulator(QWidget):
         super().__init__()
         self.w_scale = int((screen_w // self.width) * 0.75)
         self.h_scale = int((screen_h // self.height) * 0.75)
+        self.is_paused = False
+        self.drones_locations = (np.random.rand(options.drones_amount, 2) * self.width) - (self.width / 2)
+        self.focus_drone = -1
+        self.cycle_phases = ["Decision", "Empty", "Sensing", "Sending"]
+
+        self.bs_size = 128
+        self.location_size = 36
+        self.uav_size = 34
 
         # TODO: remove this mock value
         self.cycleNo = 0
 
         self.init_window()
+    
+    def mousePressEvent(self, event):
+        center_x = int(self.width * self.w_scale / 2)
+        center_y = int(self.height * self.h_scale / 2)
+        for i, (x,y), in enumerate(self.drones_locations):
+            xx = int(center_x + x * self.w_scale)
+            yy = int(center_y + y * self.h_scale)
+            if xx - self.uav_size <= event.x() <= xx + self.uav_size and yy - self.uav_size <= event.y() <= yy + self.uav_size:
+                self.focus_drone = i
+                break
+        self.updateFocusDrone()
 
     @property
     def width(self):
@@ -45,9 +64,20 @@ class Simulator(QWidget):
         # TODO: use the real peakAoI
         return round(42 + rnd() * 21, 5)
 
+    @property
+    def focused_drone_phase(self):
+        # TODO: return actual drone phase using self.focus_drone
+        return self.cycle_phases[0]
+
     def get_trajectory(self, drone_index):
         # TODO: use the real trajectory
         return randint(0, options.sensing_locations_amount-1)
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Return:
+            self.is_paused = not self.is_paused
+        elif event.key() == Qt.Key_Backspace:
+            self.cycleNo = max(0, self.cycleNo-1)
 
     def updateCurrentCyle(self):
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
@@ -58,9 +88,12 @@ class Simulator(QWidget):
     def updatePeakAoI(self):
         self.tableWidget.item(5, 1).setText(str(self.peakAoI))
 
+    def updateFocusDrone(self):
+        self.tableWidget.item(6, 1).setText(str(self.focus_drone))
+
     def createLegend(self):
         self.tableWidget = QTableWidget()
-        self.tableWidget.setFixedHeight(186)
+        self.tableWidget.setFixedHeight(242)
         self.tableWidget.setFixedWidth(210)
         self.tableWidget.setColumnWidth(0, 500)
         self.tableWidget.horizontalHeader().setVisible(False)
@@ -68,7 +101,7 @@ class Simulator(QWidget):
         self.tableWidget.setShowGrid(False)
         self.tableWidget.setStyleSheet("QTableWidget {background-color: gray;}")
 
-        label = ["Grid size (mt)", "Drones", "Locations", "Cycle", "Average AoI", "Peak AoI"]
+        label = ["Grid size (mt)", "Drones", "Locations", "Cycle", "Average AoI", "Peak AoI", "Drone ID" , "Cycle phase"]
 
         self.tableWidget.setRowCount(len(label))
         self.tableWidget.setColumnCount(2)
@@ -87,6 +120,8 @@ class Simulator(QWidget):
         self.tableWidget.item(1, 1).setText(str(options.drones_amount))
         self.tableWidget.item(2, 1).setText(str(options.sensing_locations_amount))
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
+        self.tableWidget.item(6, 1).setText(str(self.focus_drone))
+        self.tableWidget.item(7, 1).setText(self.focused_drone_phase)
 
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -112,8 +147,6 @@ class Simulator(QWidget):
                            int(center_y - bs_size / 2),
                            bs_size, bs_size, broadcast_pixmap)
 
-        self.drones_locations = (np.random.rand(
-            options.drones_amount, 2) * self.width) - (self.width / 2)
 
         for i, (x, y) in enumerate(self.drones_locations):
             target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
@@ -135,7 +168,7 @@ class Simulator(QWidget):
         self.updateAvgAoI()
         self.updatePeakAoI()
         # TODO: remove this line and use the real value
-        self.cycleNo += 1
+        if not self.is_paused: self.cycleNo += 1
         self.update()
 
     def init_window(self):
