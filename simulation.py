@@ -32,7 +32,26 @@ class Simulator(QWidget):
         self.w_scale = int((screen_w // self.width) * 0.75)
         self.h_scale = int((screen_h // self.height) * 0.75)
         self.cycle_num = 0
+        self.is_paused = False
+        self.focus_drone = -1
+        self.focus_drone_phase = -1
+        self.cycle_phases = ["Decision", "Empty", "Sensing", "Sending"]
+
+        self.bs_size = 128
+        self.location_size = 36
+        self.uav_size = 34
         self.init_window()
+    
+    def mousePressEvent(self, event):
+        center_x = int(self.width * self.w_scale / 2)
+        center_y = int(self.height * self.h_scale / 2)
+        for i, (x,y), in enumerate(options.drones_vec[self.currentCycle-1]):
+            xx = int(center_x + x * self.w_scale)
+            yy = int(center_y + y * self.h_scale)
+            if xx - self.uav_size <= event.x() <= xx + self.uav_size and yy - self.uav_size <= event.y() <= yy + self.uav_size:
+                self.focus_drone = i
+                break
+        self.updateFocusDrone()
 
     @property
     def width(self):
@@ -54,8 +73,21 @@ class Simulator(QWidget):
     def peakAoI(self):
         return np.max(options.aois_vec[self.currentCycle-1])
 
+    @property
+    def focused_drone_phase(self):
+        if self.currentCycle <= 0 or self.focus_drone < 0:
+            return ""
+        cycle_phase_idx = options.cycle_stages_vec[self.currentCycle-1][self.focus_drone]
+        return self.cycle_phases[cycle_phase_idx]
+
     def get_trajectory(self, drone_index):
         return options.chosen_loc_vec[self.currentCycle-1][drone_index]
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Return:
+            self.is_paused = not self.is_paused
+        elif event.key() == Qt.Key_Backspace:
+            self.cycle_num = max(1, self.cycle_num-1)
 
     def updateCurrentCyle(self):
         self.tableWidget.item(3, 1).setText("{}/{}".format(self.currentCycle+1, options.cycles_num))
@@ -66,9 +98,12 @@ class Simulator(QWidget):
     def updatePeakAoI(self):
         self.tableWidget.item(5, 1).setText(str(self.peakAoI))
 
+    def updateFocusDrone(self):
+        self.tableWidget.item(6, 1).setText(str(self.focus_drone))
+
     def createLegend(self):
         self.tableWidget = QTableWidget()
-        self.tableWidget.setFixedHeight(186)
+        self.tableWidget.setFixedHeight(242)
         self.tableWidget.setFixedWidth(210)
         self.tableWidget.setColumnWidth(0, 500)
         self.tableWidget.horizontalHeader().setVisible(False)
@@ -76,7 +111,7 @@ class Simulator(QWidget):
         self.tableWidget.setShowGrid(False)
         self.tableWidget.setStyleSheet("QTableWidget {background-color: gray;}")
 
-        label = ["Grid size (mt)", "Drones", "Locations", "Cycle", "Average AoI", "Peak AoI"]
+        label = ["Grid size (mt)", "Drones", "Locations", "Cycle", "Average AoI", "Peak AoI", "Drone ID" , "Cycle stage"]
 
         self.tableWidget.setRowCount(len(label))
         self.tableWidget.setColumnCount(2)
@@ -95,6 +130,8 @@ class Simulator(QWidget):
         self.tableWidget.item(1, 1).setText(str(options.drones_amount))
         self.tableWidget.item(2, 1).setText(str(options.sensing_locations_amount))
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
+        self.tableWidget.item(6, 1).setText(str(self.focus_drone))
+        self.tableWidget.item(7, 1).setText(self.focused_drone_phase)
 
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignRight | Qt.AlignTop)
@@ -106,34 +143,30 @@ class Simulator(QWidget):
         painter = QPainter(self)
         painter.setPen(QPen(Qt.black, 1, Qt.DashLine))
 
-        bs_size = 128
-        location_size = 36
-        uav_size = 34
-
         broadcast_pixmap = QPixmap("images/antenna.png")
         locations_pixmap = QPixmap("images/wifi.png")
         uav_pixmap = QPixmap("images/drone.png")
 
         center_x = int(self.width * self.w_scale / 2)
         center_y = int(self.height * self.h_scale / 2)
-        painter.drawPixmap(int(center_x - bs_size / 2),
-                           int(center_y - bs_size / 2),
-                           bs_size, bs_size, broadcast_pixmap)
+        painter.drawPixmap(int(center_x - self.bs_size / 2),
+                           int(center_y - self.bs_size / 2),
+                           self.bs_size, self.bs_size, broadcast_pixmap)
 
         for i, (x, y) in enumerate(options.drones_vec[self.currentCycle-1]):
             target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
 
             painter.drawPixmap(int(center_x + x * self.w_scale),
-                               int(center_y + y * self.h_scale), uav_size, uav_size, uav_pixmap)
-            painter.drawLine(int(center_x + x * self.w_scale + uav_size / 2),
-                             int(center_y + y * self.h_scale + uav_size / 2),
-                             int(center_x + target_x * self.w_scale + location_size / 2),
-                             int(center_y + target_y * self.h_scale + location_size / 2))
+                               int(center_y + y * self.h_scale), self.uav_size, self.uav_size, uav_pixmap)
+            painter.drawLine(int(center_x + x * self.w_scale + self.uav_size / 2),
+                             int(center_y + y * self.h_scale + self.uav_size / 2),
+                             int(center_x + target_x * self.w_scale + self.location_size / 2),
+                             int(center_y + target_y * self.h_scale + self.location_size / 2))
 
         for x, y in options.sensing_locations:
             painter.drawPixmap(int(center_x + x * self.w_scale),
                                int(center_y + y * self.h_scale),
-                               location_size, location_size, locations_pixmap)
+                               self.location_size, self.location_size, locations_pixmap)
         if self.currentCycle == options.cycles_num:
             self.qTimer.stop()
             self.close()
@@ -143,7 +176,7 @@ class Simulator(QWidget):
         self.updateAvgAoI()
         self.updatePeakAoI()
         self.update()
-        self.cycle_num += 1
+        if not self.is_paused: self.cycle_num += 1
 
     def init_window(self):
         self.setWindowTitle("Distributed UAV-RL simulator")
@@ -203,6 +236,7 @@ options = Namespace(
     aois_vec = np.array([[]]),
     drones_vec = np.array([[]]),
     chosen_loc_vec = np.array([[]]),
+    cycle_stages_vec = np.array([[]])
 )
 
 def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount,
@@ -229,6 +263,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
     options.aois_vec = np.zeros((cycles_num, options.sensing_locations_amount), dtype=int)
     options.drones_vec = np.zeros((cycles_num, options.drones_amount, 2), dtype=float)
     options.chosen_loc_vec = np.zeros(((cycles_num, options.drones_amount)), dtype=int)
+    options.cycle_stages_vec = np.zeros((cycles_num, options.drones_amount), dtype=int)
 
 
     class DurpEnv(py_environment.PyEnvironment):
@@ -384,6 +419,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
                 if options.sensing_data_amounts[drone] == 0.0:
                     #options.aois[options.chosen_locations[drone]] = cycle
                     options.cycle_stages[drone] =  0
+            cycle_stages_vec[cycle-1][drone] = options.cycle_stages[drone]
         options.aois_vec[cycle-1] = options.aois
         options.drones_vec[cycle-1] = options.drones_locations
         options.chosen_loc_vec[cycle-1] = options.chosen_locations
