@@ -161,215 +161,209 @@ def get_location_aoi(cycle, location_index):
     return (cycle * cycle_length) - ((aois[location_index] // cycle_length) * cycle_length)
 
 def get_accumulated_aoi(cycle):
-    return max([sum([get_location_aoi(cycle, location) for location in range(locations_num)]), 0.0001])
+    return max([sum([get_location_aoi(cycle, location) for location in range(options.sensing_locations_amount)]), 0.0001])
 
 def get_trajectory(drone_index):
     chosen_location_index = chosen_locations[drone_index]
     chosen_location = sensing_locations[chosen_location_index]
     drone_location = drones_locations[drone_index]
     distance = np.linalg.norm(chosen_location - drone_location)
-    if distance <= max_speed * cycle_length:
+    if distance <= options.drone_max_speed * cycle_length:
         return chosen_location - drone_location
     else:
-        return ((chosen_location - drone_location) / distance) * max_speed * cycle_length
+        return ((chosen_location - drone_location) / distance) * options.drone_max_speed * cycle_length
 
-# -- BEGIN of the jupyter notebook's code (please refer to it for a more readable version)
-
-map_size = 100.0
-locations_num = 10
-drones_num = 5
-sensing_locations = (np.random.rand(locations_num, 2) * map_size) - (map_size / 2)
-cycle_length = 1.0
-max_speed = 5.0
-drones_locations = np.zeros((drones_num, 2), dtype=float)
-sensing_data_amounts = np.zeros(drones_num, dtype=float)
-aois = np.zeros(locations_num, dtype=int)
-chosen_locations = np.zeros(drones_num, dtype=int)
-cycle_stages = np.zeros(drones_num, dtype=int)
-bandwidth = 0.5
-total_location_data = 1.5
-data_transmission_cycle = bandwidth * cycle_length
-
-class DurpEnv(py_environment.PyEnvironment):
-    def __init__(self, drone):
-        self._drone = drone
-        self.cycle = 1
-        self._action_spec = array_spec.BoundedArraySpec(
-            shape=(1,), dtype=np.float64, minimum=0, maximum=locations_num-0.001, name='action')
-        self._observation_spec = array_spec.BoundedArraySpec(shape=(2,),
-            minimum=(-map_size/2), maximum=(map_size/2), dtype=np.float64)
-        self._state = 0
-        self._episode_ended = False
-
-    def action_spec(self):
-        return self._action_spec
-
-    def observation_spec(self):
-        return self._observation_spec
-
-    def _reset(self):
-        self._state = 0
-        self._episode_ended = False
-        return ts.restart(np.array([0.0,0.0], dtype=np.float64))
-
-    def _step(self, action):
-        chosen_location_index = int(action)
-        accumulated_aoi = get_accumulated_aoi(self.cycle)
-        aois[chosen_location_index] = self.cycle
-        new_accumulated_aoi = get_accumulated_aoi(self.cycle)
-        aoi_multiplier = 0.05
-        normalized_diff_aoi_component = \
-            ((1/(1+np.exp(- (accumulated_aoi - new_accumulated_aoi) * aoi_multiplier))) - 0.5) * 2.0
-        chosen_location = sensing_locations[chosen_location_index]
-        drone_location = drones_locations[self._drone]
-        distance = np.linalg.norm(chosen_location - drone_location)
-        distance_multiplier = 0.03
-        normalized_location_distance = (1 - (1/(1+np.exp(-distance * distance_multiplier)))) * 2.0
-        aoi_weight = 0.99
-        reward = normalized_diff_aoi_component * aoi_weight + normalized_location_distance * (1.0 - aoi_weight)
-        self.cycle += 8
-        return ts.transition(chosen_location, reward=reward)
-
-learning_rate = 0.001
-optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
-environments = []
-agents = []
-for drone in range(drones_num):
-    durp_env = DurpEnv(drone)
-    train_env = tf_py_environment.TFPyEnvironment(durp_env)
-    actor_rnn_net = actor_rnn_network.ActorRnnNetwork(
-        train_env.observation_spec(), 
-        train_env.action_spec()
-    )
-    critic_rnn_net = critic_rnn_network.CriticRnnNetwork(
-        (train_env.observation_spec(), train_env.action_spec()), 
-        lstm_size=[2]
-    )
-    actor_net = actor_network.ActorNetwork(
-        train_env.observation_spec(), 
-        train_env.action_spec()
-    )
-    critic_net = critic_network.CriticNetwork(
-        (train_env.observation_spec(), train_env.action_spec()), 
-        output_activation_fn=tf.keras.activations.sigmoid,
-        activation_fn=tf.nn.relu
-    )
-    agent = ddpg_agent.DdpgAgent(
-    train_env.time_step_spec(),
-    train_env.action_spec(),
-    critic_network=critic_net,
-    actor_network=actor_net,
-    critic_optimizer=optimizer,
-    actor_optimizer=optimizer,
-    )
-    agent.initialize()
-    agents.append(agent)
-    environments.append(train_env)
-num_iterations = 500
-initial_collect_steps = 100
-collect_steps_per_iteration = 100
-batch_size = 64
-
-def collect_step(environment, policy, buffer):
-  time_step = environment.current_time_step()
-  action_step = policy.action(time_step)
-  next_time_step = environment.step(action_step.action)
-  traj = trajectory.from_transition(time_step, action_step, next_time_step)
-  buffer.add_batch(traj)
-
-def collect_data(env, policy, buffer, steps):
-  for _ in range(steps):
-    collect_step(env, policy, buffer)
-
-for i in range(len(agents)):
-    agent = agents[i]
-    env = environments[i]
-    replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-        data_spec=agent.collect_data_spec,
-        batch_size=env.batch_size)
-    random_policy = random_tf_policy.RandomTFPolicy(env.time_step_spec(), env.action_spec())              
-    aois = np.zeros(locations_num, dtype=int)
-    collect_data(env, random_policy, replay_buffer, initial_collect_steps)
-    aois = np.zeros(locations_num, dtype=int)
-    dataset = replay_buffer.as_dataset(
-    num_parallel_calls=3, 
-    sample_batch_size=batch_size, 
-    num_steps=2,
-    single_deterministic_pass=False).prefetch(3)
-    iterator = iter(dataset)
-    agent.train_step_counter.assign(0)
-    for i in range(num_iterations):
-        aois = np.zeros(locations_num, dtype=int)
-        collect_data(env, agent.collect_policy, replay_buffer, 1)
-        experience, unused_info = next(iterator)
-        train_loss = agent.train(experience).loss
-        step = agent.train_step_counter.numpy()
-
-time_steps = []
-for drone in range(drones_num):
-    time_steps.append(environments[drone].reset())
-cycles_num = 1000
-aois = np.zeros(locations_num, dtype=int)
-
-# -- END of the jupyter notebook's code
-
-# -- Start of the simulation
-
-app = QApplication(sys.argv)
-screen_w, screen_h = get_screen_resolution(app)
-simulator = Simulator(map_size, map_size, drones_num, locations_num)
-simulator.show()
-
-for cycle in range(1, cycles_num + 1):
-    if cycle % 100 == 1:
-        print(get_accumulated_aoi(cycle))
-        print(aois)
-        print("----------------")
-    for drone in range(drones_num):
-        if cycle_stages[drone] == 0:
-            agent = agents[drone]
-            env = environments[drone]
-            agent.cycle = cycle
-            policy_step = agent.policy.action(time_steps[drone]) 
-            new_step = env.step(policy_step.action)
-            time_steps[drone] = new_step
-            chosen_locations[drone] = int(policy_step.action)
-            cycle_stages[drone] =  1
-        elif (drones_locations[drone] != sensing_locations[chosen_locations[drone]]).all():
-            traj = get_trajectory(drone)
-            new_location = drones_locations[drone] + traj
-            drones_locations[drone] = new_location
-        elif sensing_data_amounts[drone] == 0.0:
-            cycle_stages[drone] =  2
-            sensing_data_amounts[drone] = total_location_data
-            cycle_stages[drone] =  3
-        else:
-            sensing_data_amounts[drone] = np.max([sensing_data_amounts[drone] - data_transmission_cycle, 0.0])
-            if sensing_data_amounts[drone] == 0.0:
-                aois[chosen_locations[drone]] = cycle
-                cycle_stages[drone] =  0
-    simulator._update()
-    #time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
-
-sys.exit(app.exec())
 options = Namespace(
     sensing_locations = [],
     sensing_locations_amount = 10,
-    grid_size=100.0,
-    drones_amount=5
+    grid_size = 100.0,
+    drones_amount = 5,
+    drone_max_speed = 5.0,
+    drone_bandwidth = 0.5,
+    total_location_data = 1.5
 )
 
-def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount):
+def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount,
+            drone_max_speed=options.drone_max_speed, drone_bandwidth=options.drone_bandwidth, total_location_data=options.total_location_data):
     sensing_locations = (np.random.rand(sensing_locations_amount, 2) * grid_size) - (grid_size / 2)
     options.sensing_locations = sensing_locations
     options.sensing_locations_amount = sensing_locations_amount
     options.grid_size = grid_size
     options.drones_amount = drones_amount
+    options.drone_max_speed = drone_max_speed
+    options.drone_bandwidth = drone_bandwidth
+
+    # -- BEGIN of the jupyter notebook's code (please refer to it for a more readable version)
+
+    cycle_length = 1.0
+    drones_locations = np.zeros((options.drones_amount, 2), dtype=float)
+    sensing_data_amounts = np.zeros(options.drones_amount, dtype=float)
+    aois = np.zeros(options.sensing_locations_amount, dtype=int)
+    chosen_locations = np.zeros(options.drones_amount, dtype=int)
+    cycle_stages = np.zeros(options.drones_amount, dtype=int)
+    data_transmission_cycle = options.drone_bandwidth * cycle_length
+
+    class DurpEnv(py_environment.PyEnvironment):
+        def __init__(self, drone):
+            self._drone = drone
+            self.cycle = 1
+            self._action_spec = array_spec.BoundedArraySpec(
+                shape=(1,), dtype=np.float64, minimum=0, maximum=options.sensing_locations_amount-0.001, name='action')
+            self._observation_spec = array_spec.BoundedArraySpec(shape=(2,),
+                minimum=(-options.grid_size/2), maximum=(options.grid_size/2), dtype=np.float64)
+            self._state = 0
+            self._episode_ended = False
+
+        def action_spec(self):
+            return self._action_spec
+
+        def observation_spec(self):
+            return self._observation_spec
+
+        def _reset(self):
+            self._state = 0
+            self._episode_ended = False
+            return ts.restart(np.array([0.0,0.0], dtype=np.float64))
+
+        def _step(self, action):
+            chosen_location_index = int(action)
+            accumulated_aoi = get_accumulated_aoi(self.cycle)
+            aois[chosen_location_index] = self.cycle
+            new_accumulated_aoi = get_accumulated_aoi(self.cycle)
+            aoi_multiplier = 0.05
+            normalized_diff_aoi_component = \
+                ((1/(1+np.exp(- (accumulated_aoi - new_accumulated_aoi) * aoi_multiplier))) - 0.5) * 2.0
+            chosen_location = sensing_locations[chosen_location_index]
+            drone_location = drones_locations[self._drone]
+            distance = np.linalg.norm(chosen_location - drone_location)
+            distance_multiplier = 0.03
+            normalized_location_distance = (1 - (1/(1+np.exp(-distance * distance_multiplier)))) * 2.0
+            aoi_weight = 0.99
+            reward = normalized_diff_aoi_component * aoi_weight + normalized_location_distance * (1.0 - aoi_weight)
+            self.cycle += 8
+            return ts.transition(chosen_location, reward=reward)
+
+    learning_rate = 0.001
+    optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+    environments = []
+    agents = []
+    for drone in range(options.drones_amount):
+        durp_env = DurpEnv(drone)
+        train_env = tf_py_environment.TFPyEnvironment(durp_env)
+        actor_rnn_net = actor_rnn_network.ActorRnnNetwork(
+            train_env.observation_spec(), 
+            train_env.action_spec()
+        )
+        critic_rnn_net = critic_rnn_network.CriticRnnNetwork(
+            (train_env.observation_spec(), train_env.action_spec()), 
+            lstm_size=[2]
+        )
+        actor_net = actor_network.ActorNetwork(
+            train_env.observation_spec(), 
+            train_env.action_spec()
+        )
+        critic_net = critic_network.CriticNetwork(
+            (train_env.observation_spec(), train_env.action_spec()), 
+            output_activation_fn=tf.keras.activations.sigmoid,
+            activation_fn=tf.nn.relu
+        )
+        agent = ddpg_agent.DdpgAgent(
+        train_env.time_step_spec(),
+        train_env.action_spec(),
+        critic_network=critic_net,
+        actor_network=actor_net,
+        critic_optimizer=optimizer,
+        actor_optimizer=optimizer,
+        )
+        agent.initialize()
+        agents.append(agent)
+        environments.append(train_env)
+    num_iterations = 500
+    initial_collect_steps = 100
+    collect_steps_per_iteration = 100
+    batch_size = 64
+
+    def collect_step(environment, policy, buffer):
+    time_step = environment.current_time_step()
+    action_step = policy.action(time_step)
+    next_time_step = environment.step(action_step.action)
+    traj = trajectory.from_transition(time_step, action_step, next_time_step)
+    buffer.add_batch(traj)
+
+    def collect_data(env, policy, buffer, steps):
+    for _ in range(steps):
+        collect_step(env, policy, buffer)
+
+    for i in range(len(agents)):
+        agent = agents[i]
+        env = environments[i]
+        replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+            data_spec=agent.collect_data_spec,
+            batch_size=env.batch_size)
+        random_policy = random_tf_policy.RandomTFPolicy(env.time_step_spec(), env.action_spec())              
+        aois = np.zeros(options.sensing_locations_amount, dtype=int)
+        collect_data(env, random_policy, replay_buffer, initial_collect_steps)
+        aois = np.zeros(options.sensing_locations_amount, dtype=int)
+        dataset = replay_buffer.as_dataset(
+        num_parallel_calls=3, 
+        sample_batch_size=batch_size, 
+        num_steps=2,
+        single_deterministic_pass=False).prefetch(3)
+        iterator = iter(dataset)
+        agent.train_step_counter.assign(0)
+        for i in range(num_iterations):
+            aois = np.zeros(options.sensing_locations_amount, dtype=int)
+            collect_data(env, agent.collect_policy, replay_buffer, 1)
+            experience, unused_info = next(iterator)
+            train_loss = agent.train(experience).loss
+            step = agent.train_step_counter.numpy()
+
+    time_steps = []
+    for drone in range(options.drones_amount):
+        time_steps.append(environments[drone].reset())
+    cycles_num = 1000
+    aois = np.zeros(options.sensing_locations_amount, dtype=int)
+
+    # -- END of the jupyter notebook's code
+
+    # -- Start of the simulation
 
     app = QApplication(sys.argv)
     screen_w, screen_h = get_screen_resolution(app)
     simulator = Simulator(screen_w, screen_h)
     simulator.show()
+
+    for cycle in range(1, cycles_num + 1):
+        if cycle % 100 == 1:
+            print(get_accumulated_aoi(cycle))
+            print(aois)
+            print("----------------")
+        for drone in range(options.drones_amount):
+            if cycle_stages[drone] == 0:
+                agent = agents[drone]
+                env = environments[drone]
+                agent.cycle = cycle
+                policy_step = agent.policy.action(time_steps[drone]) 
+                new_step = env.step(policy_step.action)
+                time_steps[drone] = new_step
+                chosen_locations[drone] = int(policy_step.action)
+                cycle_stages[drone] =  1
+            elif (drones_locations[drone] != sensing_locations[chosen_locations[drone]]).all():
+                traj = get_trajectory(drone)
+                new_location = drones_locations[drone] + traj
+                drones_locations[drone] = new_location
+            elif sensing_data_amounts[drone] == 0.0:
+                cycle_stages[drone] =  2
+                sensing_data_amounts[drone] = options.total_location_data
+                cycle_stages[drone] =  3
+            else:
+                sensing_data_amounts[drone] = np.max([sensing_data_amounts[drone] - data_transmission_cycle, 0.0])
+                if sensing_data_amounts[drone] == 0.0:
+                    aois[chosen_locations[drone]] = cycle
+                    cycle_stages[drone] =  0
+        simulator._update()
+        #time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
+    
     sys.exit(app.exec())
 
 if __name__ == '__main__':
