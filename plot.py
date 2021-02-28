@@ -29,5 +29,5 @@ plt.legend(loc="lower right")
 ax.set(xlabel='Number of training episodes', ylabel='Accumulated AoI [s]')
 ax.grid()
 
-fig.savefig("accumulated_aoi_plot.png")
+fig.savefig("images/accumulated_aoi_plot.png")
 plt.show()
