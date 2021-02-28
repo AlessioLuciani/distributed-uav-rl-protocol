@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from tf_agents.networks import q_network
+from tf_agents.agents.dqn import dqn_agent
 from tf_agents.agents.ddpg import (
     ddpg_agent,
     critic_network,
@@ -288,6 +289,16 @@ def get_trajectory(drone_index):
         )
 
 
+def reset_aois():
+    for i in range(options.sensing_locations_amount):
+        options.aois[i] = 0
+
+
+def reset_drones_locations():
+    for i in range(options.drones_amount):
+        options.drones_locations[i] = np.array([0.0, 0.0])
+
+
 options = Namespace(
     cycle_length=1.0,
     sensing_locations=np.array([]),
@@ -297,6 +308,7 @@ options = Namespace(
     sensing_locations_amount=10,
     cycle_stages=np.array([]),
     data_transmission_cycle=0.0,
+    current_cycle=[0],
     grid_size=100.0,
     drones_amount=5,
     drone_max_speed=5.0,
@@ -349,12 +361,11 @@ def main(
     class DurpEnv(py_environment.PyEnvironment):
         def __init__(self, drone):
             self._drone = drone
-            self.cycle = 1
             self._action_spec = array_spec.BoundedArraySpec(
-                shape=(1,),
-                dtype=np.float64,
+                shape=(),
+                dtype=np.int32,
                 minimum=0,
-                maximum=options.sensing_locations_amount - 0.001,
+                maximum=options.sensing_locations_amount - 1,
                 name="action",
             )
             self._observation_spec = array_spec.BoundedArraySpec(
@@ -363,8 +374,6 @@ def main(
                 maximum=(options.grid_size / 2),
                 dtype=np.float64,
             )
-            self._state = 0
-            self._episode_ended = False
 
         def action_spec(self):
             return self._action_spec
@@ -373,15 +382,14 @@ def main(
             return self._observation_spec
 
         def _reset(self):
-            self._state = 0
-            self._episode_ended = False
+
             return ts.restart(np.array([0.0, 0.0], dtype=np.float64))
 
         def _step(self, action):
             chosen_location_index = int(action)
-            accumulated_aoi = get_accumulated_aoi(self.cycle)
-            options.aois[chosen_location_index] = self.cycle
-            new_accumulated_aoi = get_accumulated_aoi(self.cycle)
+            accumulated_aoi = get_accumulated_aoi(options.current_cycle[0])
+            options.aois[chosen_location_index] = options.current_cycle[0]
+            new_accumulated_aoi = get_accumulated_aoi(options.current_cycle[0])
             aoi_multiplier = 0.05
             normalized_diff_aoi_component = (
                 (
@@ -402,12 +410,14 @@ def main(
             normalized_location_distance = (
                 1 - (1 / (1 + np.exp(-distance * distance_multiplier)))
             ) * 2.0
-            aoi_weight = 0.99
+            aoi_weight = 0.7
+            distance_weight = 0.3
             reward = (
                 normalized_diff_aoi_component * aoi_weight
-                + normalized_location_distance * (1.0 - aoi_weight)
+                + normalized_location_distance * distance_weight
+                + np.random.random() * (1.0 - aoi_weight - distance_weight)
             )
-            self.cycle += 8
+
             return ts.transition(chosen_location, reward=reward)
 
     learning_rate = 0.001
@@ -417,6 +427,7 @@ def main(
     for drone in range(options.drones_amount):
         durp_env = DurpEnv(drone)
         train_env = tf_py_environment.TFPyEnvironment(durp_env)
+        """
         actor_rnn_net = actor_rnn_network.ActorRnnNetwork(
             train_env.observation_spec(), train_env.action_spec()
         )
@@ -438,65 +449,206 @@ def main(
             actor_network=actor_net,
             critic_optimizer=optimizer,
             actor_optimizer=optimizer,
+        )"""
+        q_net = q_network.QNetwork(
+            train_env.observation_spec(), train_env.action_spec()
         )
+
+        train_step_counter = tf.Variable(0)
+
+        agent = dqn_agent.DqnAgent(
+            train_env.time_step_spec(),
+            train_env.action_spec(),
+            q_network=q_net,
+            optimizer=optimizer,
+            # td_errors_loss_fn=utils.common.element_wise_squared_loss,
+            train_step_counter=train_step_counter,
+        )
+
         agent.initialize()
         agents.append(agent)
         environments.append(train_env)
-    num_iterations = 20
-    initial_collect_steps = 100
-    collect_steps_per_iteration = 100
-    batch_size = 64
 
-    def collect_step(environment, policy, buffer):
+    num_iterations = 20
+    intermediate_iterations = 10
+
+    eval_interval = 10
+
+    initial_collect_steps = 1  # @param {type:"integer"}
+    collect_steps_per_iteration = 1  # @param {type:"integer"}
+
+    batch_size = 64  # @param {type:"integer"}
+
+    def compute_avg_return(environment, policy, num_episodes=10):
+
+        total_return = 0.0
+        for _ in range(num_episodes):
+
+            time_step = environment.reset()
+            episode_return = 0.0
+
+            # while not time_step.is_last():
+            for m in range(10):
+                action_step = policy.action(time_step)
+                time_step = environment.step(action_step.action)
+                episode_return += time_step.reward
+            total_return += episode_return
+
+        avg_return = total_return / num_episodes
+        return avg_return.numpy()[0]
+
+    def collect_step(environment, policy, buffer, drone):
         time_step = environment.current_time_step()
         action_step = policy.action(time_step)
         next_time_step = environment.step(action_step.action)
+        options.drones_locations[drone] = next_time_step.observation
         traj = trajectory.from_transition(time_step, action_step, next_time_step)
+
         buffer.add_batch(traj)
 
-    def collect_data(env, policy, buffer, steps):
-        for _ in range(steps):
-            collect_step(env, policy, buffer)
+    def collect_data(env, policy, buffer, steps, drone):
+        for step in range(1, steps + 1):
+            options.current_cycle[0] = step
+            collect_step(env, policy, buffer, drone)
 
+    """
     for i in range(len(agents)):
         agent = agents[i]
         env = environments[i]
+
         replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-            data_spec=agent.collect_data_spec, batch_size=env.batch_size
-        )
-        random_policy = random_tf_policy.RandomTFPolicy(
-            env.time_step_spec(), env.action_spec()
-        )
-        options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
-        collect_data(env, random_policy, replay_buffer, initial_collect_steps)
-        options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
+            data_spec=agent.collect_data_spec,
+            batch_size=env.batch_size)
+
+        random_policy = random_tf_policy.RandomTFPolicy(env.time_step_spec(),
+                                                    env.action_spec())
+
+        reset_drones_locations()                            
+        reset_aois()
+
+        collect_data(env, random_policy, replay_buffer, initial_collect_steps, i)
+
+        reset_drones_locations()
+        reset_aois()
+
+
         dataset = replay_buffer.as_dataset(
-            num_parallel_calls=3,
-            sample_batch_size=batch_size,
-            num_steps=2,
-            single_deterministic_pass=False,
-        ).prefetch(3)
+        num_parallel_calls=3, 
+        sample_batch_size=batch_size, 
+        num_steps=2,
+        single_deterministic_pass=False).prefetch(3)
         iterator = iter(dataset)
+            
+        # Reset the train step
         agent.train_step_counter.assign(0)
-        for i in range(num_iterations):
-            options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
-            collect_data(env, agent.collect_policy, replay_buffer, 1)
+
+        # Evaluate the agent's policy once before training.
+        #avg_return = compute_avg_return(eval_env, agent.policy, num_eval_episodes)
+        #returns = [avg_return]
+
+        for j in range(num_iterations):
+            reset_drones_locations()
+            reset_aois()
+            
+            # Collect a few steps using collect_policy and save to the replay buffer.
+            collect_data(env, agent.collect_policy, replay_buffer, collect_steps_per_iteration, i)
+            
+        
+            # Sample a batch of data from the buffer and update the agent's network.
             experience, unused_info = next(iterator)
             train_loss = agent.train(experience).loss
+
+            #print(train_loss)
+
             step = agent.train_step_counter.numpy()
+
+    """
+
+    replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
+        data_spec=agents[0].collect_data_spec, batch_size=environments[0].batch_size
+    )
+
+    random_policy = random_tf_policy.RandomTFPolicy(
+        environments[0].time_step_spec(), environments[0].action_spec()
+    )
+
+    reset_aois()
+    reset_drones_locations()
+
+    collect_data(
+        environments[0], random_policy, replay_buffer, initial_collect_steps, 0
+    )
+
+    reset_aois()
+    reset_drones_locations()
+
+    dataset = replay_buffer.as_dataset(
+        num_parallel_calls=3, sample_batch_size=batch_size, num_steps=2
+    ).prefetch(3)
+    iterator = iter(dataset)
+
+    # Reset the train step
+
+    returns = np.zeros(
+        (options.drones_amount, (num_iterations // eval_interval) + 1), dtype=np.float64
+    )
+    for k in range(len(agents)):
+
+        avg_return = compute_avg_return(environments[k], agents[k].policy)
+        returns[k][0] = avg_return
+
+    for i in range(num_iterations):
+
+        reset_aois()
+        reset_drones_locations()
+
+        if i % 100 == 0:
+            print("----------------", i)
+
+        for j in range(intermediate_iterations):
+
+            for k in range(len(agents)):
+                agent = agents[k]
+                env = environments[k]
+
+                # Collect a few steps using collect_policy and save to the replay buffer.
+                collect_data(
+                    env,
+                    agent.collect_policy,
+                    replay_buffer,
+                    collect_steps_per_iteration,
+                    k,
+                )
+
+        for k in range(len(agents)):
+            agent = agents[k]
+
+            # Sample a batch of data from the buffer and update the agent's network.
+            experience, unused_info = next(iterator)
+            train_loss = agent.train(experience).loss
+
+            print("Loss:", train_loss)
+
+        if i % eval_interval == 0:
+            for k in range(len(agents)):
+                agent = agents[k]
+
+                avg_return = compute_avg_return(environments[k], agent.policy)
+                returns[k][(num_iterations // eval_interval)] = avg_return
 
     time_steps = []
     for drone in range(options.drones_amount):
         time_steps.append(environments[drone].reset())
 
-    options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
+    reset_aois()
+    reset_drones_locations()
 
     # -- END of the jupyter notebook's code
 
     # -- Start of the simulation
 
     for cycle in range(1, options.cycles_num + 1):
-        if cycle % 100 == 1:
+        if cycle % 10 == 1:
             print(get_accumulated_aoi(cycle))
             print(options.aois)
             print("----------------")
@@ -504,7 +656,7 @@ def main(
             if options.cycle_stages[drone] == 0:
                 agent = agents[drone]
                 env = environments[drone]
-                agent.cycle = cycle
+                options.current_cycle[0] = cycle
                 policy_step = agent.policy.action(time_steps[drone])
                 new_step = env.step(policy_step.action)
                 time_steps[drone] = new_step
