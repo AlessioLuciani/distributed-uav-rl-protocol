@@ -469,8 +469,8 @@ def main(
         agents.append(agent)
         environments.append(train_env)
 
-    num_iterations = 20
-    intermediate_iterations = 10
+    num_iterations = 5
+    intermediate_iterations = 5
 
     eval_interval = 10
 
