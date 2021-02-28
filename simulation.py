@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 
 from tf_agents.networks import q_network
-from tf_agents.agents.ddpg import ddpg_agent, critic_network, actor_network, critic_rnn_network, actor_rnn_network
+from tf_agents.agents.ddpg import (
+    ddpg_agent,
+    critic_network,
+    actor_network,
+    critic_rnn_network,
+    actor_rnn_network,
+)
 from tf_agents.specs import tensor_spec, array_spec
 from tf_agents.environments import py_environment
 from tf_agents.environments import tf_py_environment
@@ -24,9 +30,7 @@ import numpy as np
 import tensorflow as tf
 
 
-
 class Simulator(QWidget):
-
     def __init__(self, screen_w, screen_h):
         super().__init__()
         self.w_scale = int((screen_w // self.width) * 0.75)
@@ -41,18 +45,21 @@ class Simulator(QWidget):
         self.location_size = 36
         self.uav_size = 34
         self.init_window()
-    
+
     def mousePressEvent(self, event):
         center_x = int(self.width * self.w_scale / 2)
         center_y = int(self.height * self.h_scale / 2)
-        for i, (x,y), in enumerate(options.drones_vec[self.currentCycle-1]):
+        for i, (x, y), in enumerate(options.drones_vec[self.currentCycle - 1]):
             xx = int(center_x + x * self.w_scale)
             yy = int(center_y + y * self.h_scale)
-            if xx - self.uav_size <= event.x() <= xx + self.uav_size and yy - self.uav_size <= event.y() <= yy + self.uav_size:
+            if (
+                xx - self.uav_size <= event.x() <= xx + self.uav_size
+                and yy - self.uav_size <= event.y() <= yy + self.uav_size
+            ):
                 self.focus_drone = i
                 break
-        print(self.focus_drone_phase)
         self.updateFocusDrone()
+        self.updateFocusIcon()
 
     @property
     def width(self):
@@ -68,30 +75,34 @@ class Simulator(QWidget):
 
     @property
     def avgAoI(self):
-        return np.mean(options.aois_vec[self.currentCycle-1])
+        return np.mean(options.aois_vec[self.currentCycle - 1])
 
     @property
     def peakAoI(self):
-        return np.max(options.aois_vec[self.currentCycle-1])
+        return np.max(options.aois_vec[self.currentCycle - 1])
 
     @property
     def focused_drone_phase(self):
         if self.currentCycle <= 0 or self.focus_drone < 0:
             return ""
-        cycle_phase_idx = options.cycle_stages_vec[self.currentCycle-1][self.focus_drone]
+        cycle_phase_idx = options.cycle_stages_vec[self.currentCycle - 1][
+            self.focus_drone
+        ]
         return self.cycle_phases[cycle_phase_idx]
 
     def get_trajectory(self, drone_index):
-        return options.chosen_loc_vec[self.currentCycle-1][drone_index]
+        return options.chosen_loc_vec[self.currentCycle - 1][drone_index]
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Return:
             self.is_paused = not self.is_paused
         elif event.key() == Qt.Key_Backspace:
-            self.cycle_num = max(1, self.cycle_num-1)
+            self.cycle_num = max(1, self.cycle_num - 1)
 
     def updateCurrentCyle(self):
-        self.tableWidget.item(3, 1).setText("{}/{}".format(self.currentCycle+1, options.cycles_num))
+        self.tableWidget.item(3, 1).setText(
+            "{}/{}".format(self.currentCycle + 1, options.cycles_num)
+        )
 
     def updateAvgAoI(self):
         self.tableWidget.item(4, 1).setText(str(self.avgAoI))
@@ -101,6 +112,9 @@ class Simulator(QWidget):
 
     def updateFocusDrone(self):
         self.tableWidget.item(6, 1).setText(str(self.focus_drone))
+
+    def updateFocusIcon(self):
+        self.tableWidget.item(7, 1).setText(self.focused_drone_phase)
 
     def createLegend(self):
         self.tableWidget = QTableWidget()
@@ -112,7 +126,16 @@ class Simulator(QWidget):
         self.tableWidget.setShowGrid(False)
         self.tableWidget.setStyleSheet("QTableWidget {background-color: gray;}")
 
-        label = ["Grid size (mt)", "Drones", "Locations", "Cycle", "Average AoI", "Peak AoI", "Drone ID" , "Cycle stage"]
+        label = [
+            "Grid size (mt)",
+            "Drones",
+            "Locations",
+            "Cycle",
+            "Average AoI",
+            "Peak AoI",
+            "Drone ID",
+            "Cycle stage",
+        ]
 
         self.tableWidget.setRowCount(len(label))
         self.tableWidget.setColumnCount(2)
@@ -127,7 +150,8 @@ class Simulator(QWidget):
             self.tableWidget.setItem(i, 1, value)
 
         self.tableWidget.item(0, 1).setText(
-            "{}x{}".format(int(self.width), int(self.height)))
+            "{}x{}".format(int(self.width), int(self.height))
+        )
         self.tableWidget.item(1, 1).setText(str(options.drones_amount))
         self.tableWidget.item(2, 1).setText(str(options.sensing_locations_amount))
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
@@ -140,7 +164,6 @@ class Simulator(QWidget):
         self.setLayout(layout)
 
     def paintEvent(self, event):
-        
         painter = QPainter(self)
         painter.setPen(QPen(Qt.black, 1, Qt.DashLine))
 
@@ -150,40 +173,66 @@ class Simulator(QWidget):
 
         center_x = int(self.width * self.w_scale / 2)
         center_y = int(self.height * self.h_scale / 2)
-        painter.drawPixmap(int(center_x - self.bs_size / 2),
-                           int(center_y - self.bs_size / 2),
-                           self.bs_size, self.bs_size, broadcast_pixmap)
+        painter.drawPixmap(
+            int(center_x - self.bs_size / 2),
+            int(center_y - self.bs_size / 2),
+            self.bs_size,
+            self.bs_size,
+            broadcast_pixmap,
+        )
 
-        for i, (x, y) in enumerate(options.drones_vec[self.currentCycle-1]):
+        for i, (x, y) in enumerate(options.drones_vec[self.currentCycle - 1]):
             target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
 
-            painter.drawPixmap(int(center_x + x * self.w_scale),
-                               int(center_y + y * self.h_scale), self.uav_size, self.uav_size, uav_pixmap)
-            painter.drawLine(int(center_x + x * self.w_scale + self.uav_size / 2),
-                             int(center_y + y * self.h_scale + self.uav_size / 2),
-                             int(center_x + target_x * self.w_scale + self.location_size / 2),
-                             int(center_y + target_y * self.h_scale + self.location_size / 2))
+            painter.drawPixmap(
+                int(center_x + x * self.w_scale),
+                int(center_y + y * self.h_scale),
+                self.uav_size,
+                self.uav_size,
+                uav_pixmap,
+            )
+            if self.focus_drone < 0 or self.focus_drone != i:
+
+                painter.setPen(QPen(Qt.black, 1, Qt.DashLine))
+            else:
+                painter.setPen(QPen(Qt.red, 1, Qt.DashLine))
+
+            painter.drawLine(
+                int(center_x + x * self.w_scale + self.uav_size / 2),
+                int(center_y + y * self.h_scale + self.uav_size / 2),
+                int(center_x + target_x * self.w_scale + self.location_size / 2),
+                int(center_y + target_y * self.h_scale + self.location_size / 2),
+            )
 
         for x, y in options.sensing_locations:
-            painter.drawPixmap(int(center_x + x * self.w_scale),
-                               int(center_y + y * self.h_scale),
-                               self.location_size, self.location_size, locations_pixmap)
+            painter.drawPixmap(
+                int(center_x + x * self.w_scale),
+                int(center_y + y * self.h_scale),
+                self.location_size,
+                self.location_size,
+                locations_pixmap,
+            )
         if self.currentCycle == options.cycles_num:
             self.qTimer.stop()
             self.close()
 
     def _update(self):
+        self.updateFocusIcon()
         self.updateCurrentCyle()
         self.updateAvgAoI()
         self.updatePeakAoI()
         self.update()
-        if not self.is_paused: self.cycle_num += 1
+        if not self.is_paused:
+            self.cycle_num += 1
 
     def init_window(self):
         self.setWindowTitle("Distributed UAV-RL simulator")
-        self.setFixedSize(int(self.width * self.w_scale),
-                          int(self.height * self.h_scale))
-        self.setGeometry(0, 0, int(self.width * self.w_scale), int(self.height * self.h_scale))
+        self.setFixedSize(
+            int(self.width * self.w_scale), int(self.height * self.h_scale)
+        )
+        self.setGeometry(
+            0, 0, int(self.width * self.w_scale), int(self.height * self.h_scale)
+        )
 
         pal = self.palette()
         pal.setColor(QPalette.Background, Qt.white)
@@ -197,6 +246,7 @@ class Simulator(QWidget):
 
         self.createLegend()
 
+
 def get_screen_resolution(app):
     screen = app.primaryScreen()
     screen_size = screen.size()
@@ -204,10 +254,24 @@ def get_screen_resolution(app):
 
 
 def get_location_aoi(cycle, location_index):
-    return (cycle * options.cycle_length) - ((options.aois[location_index] // options.cycle_length) * options.cycle_length)
+    return (cycle * options.cycle_length) - (
+        (options.aois[location_index] // options.cycle_length) * options.cycle_length
+    )
+
 
 def get_accumulated_aoi(cycle):
-    return max([sum([get_location_aoi(cycle, location) for location in range(options.sensing_locations_amount)]), 0.0001])
+    return max(
+        [
+            sum(
+                [
+                    get_location_aoi(cycle, location)
+                    for location in range(options.sensing_locations_amount)
+                ]
+            ),
+            0.0001,
+        ]
+    )
+
 
 def get_trajectory(drone_index):
     chosen_location_index = options.chosen_locations[drone_index]
@@ -217,33 +281,47 @@ def get_trajectory(drone_index):
     if distance <= options.drone_max_speed * options.cycle_length:
         return chosen_location - drone_location
     else:
-        return ((chosen_location - drone_location) / distance) * options.drone_max_speed * options.cycle_length
+        return (
+            ((chosen_location - drone_location) / distance)
+            * options.drone_max_speed
+            * options.cycle_length
+        )
+
 
 options = Namespace(
-    cycle_length = 1.0,
-    sensing_locations = np.array([]),
-    aois = np.array([]),
-    sensing_data_amounts = np.array([]),
-    drones_locations = np.array([]),
-    sensing_locations_amount = 10,
-    cycle_stages = np.array([]),
-    data_transmission_cycle = 0.0,
-    grid_size = 100.0,
-    drones_amount = 5,
-    drone_max_speed = 5.0,
-    drone_bandwidth = 0.5,
-    total_location_data = 1.5,
-    cycles_num = 300,
-    aois_vec = np.array([[]]),
-    drones_vec = np.array([[]]),
-    chosen_loc_vec = np.array([[]]),
-    cycle_stages_vec = np.array([[]])
+    cycle_length=1.0,
+    sensing_locations=np.array([]),
+    aois=np.array([]),
+    sensing_data_amounts=np.array([]),
+    drones_locations=np.array([]),
+    sensing_locations_amount=10,
+    cycle_stages=np.array([]),
+    data_transmission_cycle=0.0,
+    grid_size=100.0,
+    drones_amount=5,
+    drone_max_speed=5.0,
+    drone_bandwidth=0.5,
+    total_location_data=1.5,
+    cycles_num=300,
+    aois_vec=np.array([[]]),
+    drones_vec=np.array([[]]),
+    chosen_loc_vec=np.array([[]]),
+    cycle_stages_vec=np.array([[]]),
 )
 
-def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_locations_amount, drones_amount=options.drones_amount,
-            drone_max_speed=options.drone_max_speed, drone_bandwidth=options.drone_bandwidth, total_location_data=options.total_location_data,
-            cycles_num=options.cycles_num):
-    sensing_locations = (np.random.rand(sensing_locations_amount, 2) * grid_size) - (grid_size / 2)
+
+def main(
+    grid_size=options.grid_size,
+    sensing_locations_amount=options.sensing_locations_amount,
+    drones_amount=options.drones_amount,
+    drone_max_speed=options.drone_max_speed,
+    drone_bandwidth=options.drone_bandwidth,
+    total_location_data=options.total_location_data,
+    cycles_num=options.cycles_num,
+):
+    sensing_locations = (np.random.rand(sensing_locations_amount, 2) * grid_size) - (
+        grid_size / 2
+    )
     options.sensing_locations = sensing_locations
     options.sensing_locations_amount = sensing_locations_amount
     options.grid_size = grid_size
@@ -261,20 +339,30 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
     options.cycle_stages = np.zeros(options.drones_amount, dtype=int)
     options.data_transmission_cycle = options.drone_bandwidth * options.cycle_length
 
-    options.aois_vec = np.zeros((cycles_num, options.sensing_locations_amount), dtype=int)
+    options.aois_vec = np.zeros(
+        (cycles_num, options.sensing_locations_amount), dtype=int
+    )
     options.drones_vec = np.zeros((cycles_num, options.drones_amount, 2), dtype=float)
     options.chosen_loc_vec = np.zeros(((cycles_num, options.drones_amount)), dtype=int)
     options.cycle_stages_vec = np.zeros((cycles_num, options.drones_amount), dtype=int)
-
 
     class DurpEnv(py_environment.PyEnvironment):
         def __init__(self, drone):
             self._drone = drone
             self.cycle = 1
             self._action_spec = array_spec.BoundedArraySpec(
-                shape=(1,), dtype=np.float64, minimum=0, maximum=options.sensing_locations_amount-0.001, name='action')
-            self._observation_spec = array_spec.BoundedArraySpec(shape=(2,),
-                minimum=(-options.grid_size/2), maximum=(options.grid_size/2), dtype=np.float64)
+                shape=(1,),
+                dtype=np.float64,
+                minimum=0,
+                maximum=options.sensing_locations_amount - 0.001,
+                name="action",
+            )
+            self._observation_spec = array_spec.BoundedArraySpec(
+                shape=(2,),
+                minimum=(-options.grid_size / 2),
+                maximum=(options.grid_size / 2),
+                dtype=np.float64,
+            )
             self._state = 0
             self._episode_ended = False
 
@@ -287,7 +375,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
         def _reset(self):
             self._state = 0
             self._episode_ended = False
-            return ts.restart(np.array([0.0,0.0], dtype=np.float64))
+            return ts.restart(np.array([0.0, 0.0], dtype=np.float64))
 
         def _step(self, action):
             chosen_location_index = int(action)
@@ -295,15 +383,30 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
             options.aois[chosen_location_index] = self.cycle
             new_accumulated_aoi = get_accumulated_aoi(self.cycle)
             aoi_multiplier = 0.05
-            normalized_diff_aoi_component = \
-                ((1/(1+np.exp(- (accumulated_aoi - new_accumulated_aoi) * aoi_multiplier))) - 0.5) * 2.0
+            normalized_diff_aoi_component = (
+                (
+                    1
+                    / (
+                        1
+                        + np.exp(
+                            -(accumulated_aoi - new_accumulated_aoi) * aoi_multiplier
+                        )
+                    )
+                )
+                - 0.5
+            ) * 2.0
             chosen_location = options.sensing_locations[chosen_location_index]
             drone_location = options.drones_locations[self._drone]
             distance = np.linalg.norm(chosen_location - drone_location)
             distance_multiplier = 0.03
-            normalized_location_distance = (1 - (1/(1+np.exp(-distance * distance_multiplier)))) * 2.0
+            normalized_location_distance = (
+                1 - (1 / (1 + np.exp(-distance * distance_multiplier)))
+            ) * 2.0
             aoi_weight = 0.99
-            reward = normalized_diff_aoi_component * aoi_weight + normalized_location_distance * (1.0 - aoi_weight)
+            reward = (
+                normalized_diff_aoi_component * aoi_weight
+                + normalized_location_distance * (1.0 - aoi_weight)
+            )
             self.cycle += 8
             return ts.transition(chosen_location, reward=reward)
 
@@ -315,29 +418,26 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
         durp_env = DurpEnv(drone)
         train_env = tf_py_environment.TFPyEnvironment(durp_env)
         actor_rnn_net = actor_rnn_network.ActorRnnNetwork(
-            train_env.observation_spec(), 
-            train_env.action_spec()
+            train_env.observation_spec(), train_env.action_spec()
         )
         critic_rnn_net = critic_rnn_network.CriticRnnNetwork(
-            (train_env.observation_spec(), train_env.action_spec()), 
-            lstm_size=[2]
+            (train_env.observation_spec(), train_env.action_spec()), lstm_size=[2]
         )
         actor_net = actor_network.ActorNetwork(
-            train_env.observation_spec(), 
-            train_env.action_spec()
+            train_env.observation_spec(), train_env.action_spec()
         )
         critic_net = critic_network.CriticNetwork(
-            (train_env.observation_spec(), train_env.action_spec()), 
+            (train_env.observation_spec(), train_env.action_spec()),
             output_activation_fn=tf.keras.activations.sigmoid,
-            activation_fn=tf.nn.relu
+            activation_fn=tf.nn.relu,
         )
         agent = ddpg_agent.DdpgAgent(
-        train_env.time_step_spec(),
-        train_env.action_spec(),
-        critic_network=critic_net,
-        actor_network=actor_net,
-        critic_optimizer=optimizer,
-        actor_optimizer=optimizer,
+            train_env.time_step_spec(),
+            train_env.action_spec(),
+            critic_network=critic_net,
+            actor_network=actor_net,
+            critic_optimizer=optimizer,
+            actor_optimizer=optimizer,
         )
         agent.initialize()
         agents.append(agent)
@@ -362,17 +462,20 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
         agent = agents[i]
         env = environments[i]
         replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-            data_spec=agent.collect_data_spec,
-            batch_size=env.batch_size)
-        random_policy = random_tf_policy.RandomTFPolicy(env.time_step_spec(), env.action_spec())              
+            data_spec=agent.collect_data_spec, batch_size=env.batch_size
+        )
+        random_policy = random_tf_policy.RandomTFPolicy(
+            env.time_step_spec(), env.action_spec()
+        )
         options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
         collect_data(env, random_policy, replay_buffer, initial_collect_steps)
         options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
         dataset = replay_buffer.as_dataset(
-        num_parallel_calls=3, 
-        sample_batch_size=batch_size, 
-        num_steps=2,
-        single_deterministic_pass=False).prefetch(3)
+            num_parallel_calls=3,
+            sample_batch_size=batch_size,
+            num_steps=2,
+            single_deterministic_pass=False,
+        ).prefetch(3)
         iterator = iter(dataset)
         agent.train_step_counter.assign(0)
         for i in range(num_iterations):
@@ -385,7 +488,7 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
     time_steps = []
     for drone in range(options.drones_amount):
         time_steps.append(environments[drone].reset())
-    
+
     options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
 
     # -- END of the jupyter notebook's code
@@ -402,36 +505,47 @@ def main(grid_size=options.grid_size, sensing_locations_amount=options.sensing_l
                 agent = agents[drone]
                 env = environments[drone]
                 agent.cycle = cycle
-                policy_step = agent.policy.action(time_steps[drone]) 
+                policy_step = agent.policy.action(time_steps[drone])
                 new_step = env.step(policy_step.action)
                 time_steps[drone] = new_step
                 options.chosen_locations[drone] = int(policy_step.action)
-                options.cycle_stages[drone] =  1
-            elif (options.drones_locations[drone] != options.sensing_locations[options.chosen_locations[drone]]).all():
+                options.cycle_stages[drone] = 1
+            elif (
+                options.drones_locations[drone]
+                != options.sensing_locations[options.chosen_locations[drone]]
+            ).all():
                 traj = get_trajectory(drone)
                 new_location = options.drones_locations[drone] + traj
                 options.drones_locations[drone] = new_location
             elif options.sensing_data_amounts[drone] == 0.0:
-                options.cycle_stages[drone] =  2
+                options.cycle_stages[drone] = 2
                 options.sensing_data_amounts[drone] = options.total_location_data
-                options.cycle_stages[drone] =  3
+                options.cycle_stages[drone] = 3
             else:
-                options.sensing_data_amounts[drone] = np.max([options.sensing_data_amounts[drone] - options.data_transmission_cycle, 0.0])
+                options.sensing_data_amounts[drone] = np.max(
+                    [
+                        options.sensing_data_amounts[drone]
+                        - options.data_transmission_cycle,
+                        0.0,
+                    ]
+                )
                 if options.sensing_data_amounts[drone] == 0.0:
-                    #options.aois[options.chosen_locations[drone]] = cycle
-                    options.cycle_stages[drone] =  0
-        options.cycle_stages_vec[cycle-1] = options.cycle_stages
-        options.aois_vec[cycle-1] = options.aois
-        options.drones_vec[cycle-1] = options.drones_locations
-        options.chosen_loc_vec[cycle-1] = options.chosen_locations
-        #simulator._update()
-        #time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
-    
+                    # options.aois[options.chosen_locations[drone]] = cycle
+                    options.cycle_stages[drone] = 0
+        options.cycle_stages_vec[cycle - 1] = options.cycle_stages
+        options.aois_vec[cycle - 1] = options.aois
+        options.drones_vec[cycle - 1] = options.drones_locations
+        options.chosen_loc_vec[cycle - 1] = options.chosen_locations
+        # simulator._update()
+        # time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
+
     app = QApplication(sys.argv)
     screen_w, screen_h = get_screen_resolution(app)
     simulator = Simulator(screen_w, screen_h)
     simulator.show()
     sys.exit(app.exec())
 
-if __name__ == '__main__':
-  Fire(main)
+
+if __name__ == "__main__":
+    Fire(main)
+
