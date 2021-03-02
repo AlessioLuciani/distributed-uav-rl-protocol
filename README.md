@@ -19,7 +19,7 @@ or to see the list of available options run:
 ./simulation.py --help
 ```
 
-## Preview
+## Simulator preview
 
 <img src="images/simulation.gif">
 
