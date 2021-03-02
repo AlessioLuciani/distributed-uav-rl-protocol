@@ -1,6 +1,12 @@
 # distributed-uav-rl-protocol
 Distributed UAV Sense &amp; Send Protocol using Reinforcement Learning
 
+## Install dependencies
+- Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+- Run ```conda env create -f environment.yml```
+- Run ```conda activate durp```
+- That's it!
+
 ## The simulation
 We also developed a simple GUI using the [PyQt5 library](https://www.riverbankcomputing.com/software/pyqt/) to test the effects of applying different scenarios on the simulation. To run it, launch the simulator from the project directory with default arguments using:
 
