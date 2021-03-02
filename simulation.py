@@ -21,7 +21,7 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
-from random import randint
+from random import randint, randrange
 from random import random as rnd
 from fire import Fire
 from argparse import Namespace
@@ -319,6 +319,7 @@ options = Namespace(
     drones_vec=np.array([[]]),
     chosen_loc_vec=np.array([[]]),
     cycle_stages_vec=np.array([[]]),
+    random=False,
 )
 
 
@@ -330,6 +331,7 @@ def main(
     drone_bandwidth=options.drone_bandwidth,
     total_location_data=options.total_location_data,
     cycles_num=options.cycles_num,
+    random=options.random,
 ):
     sensing_locations = (np.random.rand(sensing_locations_amount, 2) * grid_size) - (
         grid_size / 2
@@ -341,6 +343,7 @@ def main(
     options.drone_max_speed = drone_max_speed
     options.drone_bandwidth = drone_bandwidth
     options.cycles_num = cycles_num
+    options.random = random
 
     # -- BEGIN of the jupyter notebook's code (please refer to it for a more readable version)
 
@@ -656,11 +659,17 @@ def main(
             if options.cycle_stages[drone] == 0:
                 agent = agents[drone]
                 env = environments[drone]
-                options.current_cycle[0] = cycle
-                policy_step = agent.policy.action(time_steps[drone])
-                new_step = env.step(policy_step.action)
-                time_steps[drone] = new_step
-                options.chosen_locations[drone] = int(policy_step.action)
+                chosen_location_index = -1
+                if random:
+                    chosen_location_index = randrange(options.sensing_locations_amount)
+                    options.aois[chosen_location_index] = cycle
+                else:
+                    options.current_cycle[0] = cycle
+                    policy_step = agent.policy.action(time_steps[drone])
+                    new_step = env.step(policy_step.action)
+                    time_steps[drone] = new_step
+                    chosen_location_index = int(policy_step.action)
+                options.chosen_locations[drone] = chosen_location_index
                 options.cycle_stages[drone] = 1
             elif (
                 options.drones_locations[drone]
