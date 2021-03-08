@@ -299,6 +299,51 @@ def reset_drones_locations():
         options.drones_locations[i] = np.array([0.0, 0.0])
 
 
+def get_best_action(drone):
+    highest_reward = 0
+    best_action = 0
+
+    for action in range(options.sensing_locations_amount):
+
+        chosen_location_index = action
+        aoi = get_location_aoi(options.current_cycle[0], chosen_location_index)
+        aoi_multiplier = 0.05
+
+        # Using sigmoid function to obtain a value between 0 and 1. The
+        # higher the aoi difference the better, so the higher
+        # the reward.
+        normalized_diff_aoi_component = (
+            (1 / (1 + np.exp(-aoi * aoi_multiplier))) - 0.5
+        ) * 2.0
+
+        # Taking distance between current location and chosen location
+        chosen_location = options.sensing_locations[chosen_location_index]
+        drone_location = options.drones_locations[drone]
+        distance = np.linalg.norm(chosen_location - drone_location)
+
+        distance_multiplier = 0.03
+
+        # Normalizing distance
+        # between 0 and 1. The smaller the distance, the higher the reward.
+        normalized_location_distance = (
+            1 - (1 / (1 + np.exp(-distance * distance_multiplier)))
+        ) * 2.0
+
+        aoi_weight = 0.7
+        distance_weight = 0.3
+        reward = (
+            normalized_diff_aoi_component * aoi_weight
+            + normalized_location_distance * distance_weight
+            + np.random.random() * (1.0 - aoi_weight - distance_weight)
+        )
+
+        if reward >= highest_reward:
+            best_action = chosen_location_index
+            highest_reward = reward
+
+    return best_action
+
+
 options = Namespace(
     cycle_length=1.0,
     sensing_locations=np.array([]),
@@ -665,7 +710,10 @@ def main(
                     options.aois[chosen_location_index] = cycle
                 else:
                     options.current_cycle[0] = cycle
-                    policy_step = agent.policy.action(time_steps[drone])
+                    # print(get_best_action(drone))
+                    policy_step = agent.policy.action(time_steps[drone]).replace(
+                        action=tf.constant([get_best_action(drone)], dtype=np.int32)
+                    )
                     new_step = env.step(policy_step.action)
                     time_steps[drone] = new_step
                     chosen_location_index = int(policy_step.action)
@@ -694,7 +742,10 @@ def main(
                     # options.aois[options.chosen_locations[drone]] = cycle
                     options.cycle_stages[drone] = 0
         options.cycle_stages_vec[cycle - 1] = options.cycle_stages
-        options.aois_vec[cycle - 1] = options.aois
+        options.aois_vec[cycle - 1] = [
+            get_location_aoi(cycle, index)
+            for index in range(options.sensing_locations_amount)
+        ]
         options.drones_vec[cycle - 1] = options.drones_locations
         options.chosen_loc_vec[cycle - 1] = options.chosen_locations
         # simulator._update()
