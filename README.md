@@ -1,5 +1,5 @@
 # Distributed UAV RL Protocol
-An implementation of a distributed protocol for cooperative sensing and sending operations of Unmanned Aerial Vehicles (UAVs). It is built on top of [TensorFlow Agents](https://www.tensorflow.org/agents) and uses reinforcement learning (e.g. Deep Q-Learning, Actor-Critic) techniques to compute ideal trajectories.
+An implementation of a distributed protocol for cooperative sensing and sending operations of Unmanned Aerial Vehicles (UAVs) [1]. It is built on top of [TensorFlow Agents](https://www.tensorflow.org/agents) and uses reinforcement learning techniques (e.g. Deep Q-Learning, Actor-Critic) to compute ideal trajectories.
 
 ## Install dependencies
 - Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
