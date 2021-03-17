@@ -7,7 +7,7 @@ An implementation of a distributed protocol for cooperative sensing and sending 
 - Run ```conda activate durp```
 - That's it!
 
-## The simulation
+## Run the simulation
 We also developed a simple GUI using the [PyQt5 library](https://www.riverbankcomputing.com/software/pyqt/) to test the effects of applying different scenarios on the simulation. To run it, launch the simulator from the project directory with default arguments using:
 
 ```shell
