@@ -25,7 +25,9 @@ from random import randint, randrange
 from random import random as rnd
 from fire import Fire
 from argparse import Namespace
-import sys, math, time
+import sys
+import math
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
@@ -125,7 +127,8 @@ class Simulator(QWidget):
         self.tableWidget.horizontalHeader().setVisible(False)
         self.tableWidget.verticalHeader().setVisible(False)
         self.tableWidget.setShowGrid(False)
-        self.tableWidget.setStyleSheet("QTableWidget {background-color: gray;}")
+        self.tableWidget.setStyleSheet(
+            "QTableWidget {background-color: gray;}")
 
         label = [
             "Grid size (mt)",
@@ -145,8 +148,10 @@ class Simulator(QWidget):
             item = QTableWidgetItem(label)
             value = QTableWidgetItem("0")
 
-            item.setFlags(item.flags() ^ (Qt.ItemIsEditable | Qt.ItemIsSelectable))
-            value.setFlags(value.flags() ^ (Qt.ItemIsEditable | Qt.ItemIsSelectable))
+            item.setFlags(item.flags() ^ (
+                Qt.ItemIsEditable | Qt.ItemIsSelectable))
+            value.setFlags(value.flags() ^ (
+                Qt.ItemIsEditable | Qt.ItemIsSelectable))
             self.tableWidget.setItem(i, 0, item)
             self.tableWidget.setItem(i, 1, value)
 
@@ -154,7 +159,8 @@ class Simulator(QWidget):
             "{}x{}".format(int(self.width), int(self.height))
         )
         self.tableWidget.item(1, 1).setText(str(options.drones_amount))
-        self.tableWidget.item(2, 1).setText(str(options.sensing_locations_amount))
+        self.tableWidget.item(2, 1).setText(
+            str(options.sensing_locations_amount))
         self.tableWidget.item(3, 1).setText(str(self.currentCycle))
         self.tableWidget.item(6, 1).setText(str(self.focus_drone))
         self.tableWidget.item(7, 1).setText(self.focused_drone_phase)
@@ -183,7 +189,8 @@ class Simulator(QWidget):
         )
 
         for i, (x, y) in enumerate(options.drones_vec[self.currentCycle - 1]):
-            target_x, target_y = options.sensing_locations[self.get_trajectory(i)]
+            target_x, target_y = options.sensing_locations[self.get_trajectory(
+                i)]
 
             painter.drawPixmap(
                 int(center_x + x * self.w_scale),
@@ -256,7 +263,8 @@ def get_screen_resolution(app):
 
 def get_location_aoi(cycle, location_index):
     return (cycle * options.cycle_length) - (
-        (options.aois[location_index] // options.cycle_length) * options.cycle_length
+        (options.aois[location_index] //
+         options.cycle_length) * options.cycle_length
     )
 
 
@@ -391,8 +399,10 @@ def main(
     options.random = random
 
     # -- BEGIN of the jupyter notebook's code (please refer to it for a more readable version)
+    # Link to the online notebook: https://github.com/AlessioLuciani/distributed-uav-rl-protocol/blob/main/simulation.ipynb
 
-    options.drones_locations = np.zeros((options.drones_amount, 2), dtype=float)
+    options.drones_locations = np.zeros(
+        (options.drones_amount, 2), dtype=float)
     options.sensing_data_amounts = np.zeros(options.drones_amount, dtype=float)
     options.aois = np.zeros(options.sensing_locations_amount, dtype=int)
     options.chosen_locations = np.zeros(options.drones_amount, dtype=int)
@@ -402,9 +412,12 @@ def main(
     options.aois_vec = np.zeros(
         (cycles_num, options.sensing_locations_amount), dtype=int
     )
-    options.drones_vec = np.zeros((cycles_num, options.drones_amount, 2), dtype=float)
-    options.chosen_loc_vec = np.zeros(((cycles_num, options.drones_amount)), dtype=int)
-    options.cycle_stages_vec = np.zeros((cycles_num, options.drones_amount), dtype=int)
+    options.drones_vec = np.zeros(
+        (cycles_num, options.drones_amount, 2), dtype=float)
+    options.chosen_loc_vec = np.zeros(
+        ((cycles_num, options.drones_amount)), dtype=int)
+    options.cycle_stages_vec = np.zeros(
+        (cycles_num, options.drones_amount), dtype=int)
 
     class DurpEnv(py_environment.PyEnvironment):
         def __init__(self, drone):
@@ -430,7 +443,6 @@ def main(
             return self._observation_spec
 
         def _reset(self):
-
             return ts.restart(np.array([0.0, 0.0], dtype=np.float64))
 
         def _step(self, action):
@@ -445,7 +457,8 @@ def main(
                     / (
                         1
                         + np.exp(
-                            -(accumulated_aoi - new_accumulated_aoi) * aoi_multiplier
+                            -(accumulated_aoi - new_accumulated_aoi) *
+                            aoi_multiplier
                         )
                     )
                 )
@@ -475,29 +488,6 @@ def main(
     for drone in range(options.drones_amount):
         durp_env = DurpEnv(drone)
         train_env = tf_py_environment.TFPyEnvironment(durp_env)
-        """
-        actor_rnn_net = actor_rnn_network.ActorRnnNetwork(
-            train_env.observation_spec(), train_env.action_spec()
-        )
-        critic_rnn_net = critic_rnn_network.CriticRnnNetwork(
-            (train_env.observation_spec(), train_env.action_spec()), lstm_size=[2]
-        )
-        actor_net = actor_network.ActorNetwork(
-            train_env.observation_spec(), train_env.action_spec()
-        )
-        critic_net = critic_network.CriticNetwork(
-            (train_env.observation_spec(), train_env.action_spec()),
-            output_activation_fn=tf.keras.activations.sigmoid,
-            activation_fn=tf.nn.relu,
-        )
-        agent = ddpg_agent.DdpgAgent(
-            train_env.time_step_spec(),
-            train_env.action_spec(),
-            critic_network=critic_net,
-            actor_network=actor_net,
-            critic_optimizer=optimizer,
-            actor_optimizer=optimizer,
-        )"""
         q_net = q_network.QNetwork(
             train_env.observation_spec(), train_env.action_spec()
         )
@@ -509,7 +499,6 @@ def main(
             train_env.action_spec(),
             q_network=q_net,
             optimizer=optimizer,
-            # td_errors_loss_fn=utils.common.element_wise_squared_loss,
             train_step_counter=train_step_counter,
         )
 
@@ -519,23 +508,17 @@ def main(
 
     num_iterations = 5
     intermediate_iterations = 5
-
     eval_interval = 10
-
-    initial_collect_steps = 1  # @param {type:"integer"}
-    collect_steps_per_iteration = 1  # @param {type:"integer"}
-
-    batch_size = 64  # @param {type:"integer"}
+    initial_collect_steps = 1
+    collect_steps_per_iteration = 1
+    batch_size = 64
 
     def compute_avg_return(environment, policy, num_episodes=10):
-
         total_return = 0.0
         for _ in range(num_episodes):
-
             time_step = environment.reset()
             episode_return = 0.0
 
-            # while not time_step.is_last():
             for m in range(10):
                 action_step = policy.action(time_step)
                 time_step = environment.step(action_step.action)
@@ -550,7 +533,8 @@ def main(
         action_step = policy.action(time_step)
         next_time_step = environment.step(action_step.action)
         options.drones_locations[drone] = next_time_step.observation
-        traj = trajectory.from_transition(time_step, action_step, next_time_step)
+        traj = trajectory.from_transition(
+            time_step, action_step, next_time_step)
 
         buffer.add_batch(traj)
 
@@ -558,59 +542,6 @@ def main(
         for step in range(1, steps + 1):
             options.current_cycle[0] = step
             collect_step(env, policy, buffer, drone)
-
-    """
-    for i in range(len(agents)):
-        agent = agents[i]
-        env = environments[i]
-
-        replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
-            data_spec=agent.collect_data_spec,
-            batch_size=env.batch_size)
-
-        random_policy = random_tf_policy.RandomTFPolicy(env.time_step_spec(),
-                                                    env.action_spec())
-
-        reset_drones_locations()                            
-        reset_aois()
-
-        collect_data(env, random_policy, replay_buffer, initial_collect_steps, i)
-
-        reset_drones_locations()
-        reset_aois()
-
-
-        dataset = replay_buffer.as_dataset(
-        num_parallel_calls=3, 
-        sample_batch_size=batch_size, 
-        num_steps=2,
-        single_deterministic_pass=False).prefetch(3)
-        iterator = iter(dataset)
-            
-        # Reset the train step
-        agent.train_step_counter.assign(0)
-
-        # Evaluate the agent's policy once before training.
-        #avg_return = compute_avg_return(eval_env, agent.policy, num_eval_episodes)
-        #returns = [avg_return]
-
-        for j in range(num_iterations):
-            reset_drones_locations()
-            reset_aois()
-            
-            # Collect a few steps using collect_policy and save to the replay buffer.
-            collect_data(env, agent.collect_policy, replay_buffer, collect_steps_per_iteration, i)
-            
-        
-            # Sample a batch of data from the buffer and update the agent's network.
-            experience, unused_info = next(iterator)
-            train_loss = agent.train(experience).loss
-
-            #print(train_loss)
-
-            step = agent.train_step_counter.numpy()
-
-    """
 
     replay_buffer = tf_uniform_replay_buffer.TFUniformReplayBuffer(
         data_spec=agents[0].collect_data_spec, batch_size=environments[0].batch_size
@@ -636,25 +567,20 @@ def main(
     iterator = iter(dataset)
 
     # Reset the train step
-
     returns = np.zeros(
         (options.drones_amount, (num_iterations // eval_interval) + 1), dtype=np.float64
     )
     for k in range(len(agents)):
-
         avg_return = compute_avg_return(environments[k], agents[k].policy)
         returns[k][0] = avg_return
 
     for i in range(num_iterations):
-
         reset_aois()
         reset_drones_locations()
-
         if i % 100 == 0:
             print("----------------", i)
 
         for j in range(intermediate_iterations):
-
             for k in range(len(agents)):
                 agent = agents[k]
                 env = environments[k]
@@ -674,13 +600,11 @@ def main(
             # Sample a batch of data from the buffer and update the agent's network.
             experience, unused_info = next(iterator)
             train_loss = agent.train(experience).loss
-
             print("Loss:", train_loss)
 
         if i % eval_interval == 0:
             for k in range(len(agents)):
                 agent = agents[k]
-
                 avg_return = compute_avg_return(environments[k], agent.policy)
                 returns[k][(num_iterations // eval_interval)] = avg_return
 
@@ -692,7 +616,6 @@ def main(
     reset_drones_locations()
 
     # -- END of the jupyter notebook's code
-
     # -- Start of the simulation
 
     for cycle in range(1, options.cycles_num + 1):
@@ -706,13 +629,14 @@ def main(
                 env = environments[drone]
                 chosen_location_index = -1
                 if random:
-                    chosen_location_index = randrange(options.sensing_locations_amount)
+                    chosen_location_index = randrange(
+                        options.sensing_locations_amount)
                     options.aois[chosen_location_index] = cycle
                 else:
                     options.current_cycle[0] = cycle
-                    # print(get_best_action(drone))
                     policy_step = agent.policy.action(time_steps[drone]).replace(
-                        action=tf.constant([get_best_action(drone)], dtype=np.int32)
+                        action=tf.constant(
+                            [get_best_action(drone)], dtype=np.int32)
                     )
                     new_step = env.step(policy_step.action)
                     time_steps[drone] = new_step
@@ -739,7 +663,6 @@ def main(
                     ]
                 )
                 if options.sensing_data_amounts[drone] == 0.0:
-                    # options.aois[options.chosen_locations[drone]] = cycle
                     options.cycle_stages[drone] = 0
         options.cycle_stages_vec[cycle - 1] = options.cycle_stages
         options.aois_vec[cycle - 1] = [
@@ -748,8 +671,6 @@ def main(
         ]
         options.drones_vec[cycle - 1] = options.drones_locations
         options.chosen_loc_vec[cycle - 1] = options.chosen_locations
-        # simulator._update()
-        # time.sleep(1) # TODO: find a value that allows the user enjoy the simulation
 
     app = QApplication(sys.argv)
     screen_w, screen_h = get_screen_resolution(app)
@@ -760,4 +681,3 @@ def main(
 
 if __name__ == "__main__":
     Fire(main)
-
