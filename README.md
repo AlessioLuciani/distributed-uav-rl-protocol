@@ -1,5 +1,5 @@
-# distributed-uav-rl-protocol
-Distributed UAV Sense &amp; Send Protocol using Reinforcement Learning
+# Distributed UAV RL Protocol
+An implementation of a distributed protocol for cooperative sensing and sending operations of Unmanned Aerial Vehicles (UAVs). It is built on top of [TensorFlow Agents](https://www.tensorflow.org/agents) and uses reinforcement learning (e.g. Deep Q-Learning, Actor-Critic) techniques to compute ideal trajectories.
 
 ## Install dependencies
 - Download and install [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
@@ -25,3 +25,6 @@ or to see the list of available options run:
 
 ## Images credits
 Icons made by <a href="https://www.freepik.com" title="Freepik">Freepik</a>, <a href="https://www.flaticon.com/authors/photo3idea-studio" title="photo3idea_studio">photo3idea_studio</a>, and <a href="https://www.flaticon.com/authors/roundicons" title="Roundicons">Roundicons</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>
+
+## References
+[1] Jingzhi Hu, Hongliang Zhang, Lingyang Song, Robert Schober, & H. Vincent Poor. (2020). Cooperative Internet of UAVs: Distributed Trajectory Design by Multi-agent Deep Reinforcement Learning.
