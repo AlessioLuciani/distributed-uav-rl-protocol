@@ -1,6 +1,6 @@
 # Distributed UAV RL Protocol
 
-[![Open In Collab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AlessioLuciani/distributed-uav-rl-protocol)
+[![Open In Collab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AlessioLuciani/distributed-uav-rl-protocol/blob/main/simulation.ipynb)
 
 An implementation of a distributed protocol for cooperative sensing and sending operations of Unmanned Aerial Vehicles (UAVs) [1]. It is built on top of [TensorFlow Agents](https://www.tensorflow.org/agents) and uses reinforcement learning techniques (e.g. Deep Q-Learning, Actor-Critic) to compute ideal trajectories.
 
